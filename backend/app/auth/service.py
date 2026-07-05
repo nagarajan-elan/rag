@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import hashlib
-import secrets
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Tuple
 
+import jwt
 from fastapi import HTTPException, status
+
+from app.core.config import get_settings
 
 from .repository import PostgresAuthRepository
 from .schemas import LoginRequest, RefreshTokenRequest, SignupRequest, TokenResponse, UserResponse
@@ -14,6 +17,7 @@ from .schemas import LoginRequest, RefreshTokenRequest, SignupRequest, TokenResp
 class AuthService:
     def __init__(self, repository: PostgresAuthRepository | None = None) -> None:
         self.repository = repository or PostgresAuthRepository()
+        self.secret_key = get_settings().jwt_secret_key
 
     async def signup(self, payload: SignupRequest) -> UserResponse:
         existing_user = await self.repository.get_user_by_email(str(payload.email))
@@ -48,8 +52,21 @@ class AuthService:
         return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
     def _generate_tokens(self, user_id: str) -> Tuple[str, str]:
-        access_token = f"access_{secrets.token_urlsafe(24)}_{user_id}"
-        refresh_token = f"refresh_{secrets.token_urlsafe(24)}_{user_id}"
+        now = datetime.now(timezone.utc)
+        access_payload = {
+            "sub": user_id,
+            "token_type": "access",
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(minutes=15)).timestamp()),
+        }
+        refresh_payload = {
+            "sub": user_id,
+            "token_type": "refresh",
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(days=7)).timestamp()),
+        }
+        access_token = jwt.encode(access_payload, self.secret_key, algorithm="HS256")
+        refresh_token = jwt.encode(refresh_payload, self.secret_key, algorithm="HS256")
         return access_token, refresh_token
 
     def _hash_password(self, password: str) -> str:

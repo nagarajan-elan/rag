@@ -1,12 +1,13 @@
-import os
 from typing import Any
 
 from psycopg2 import pool
 
+from app.core.config import get_settings
+
 
 class Database:
     def __init__(self, dsn: str | None = None) -> None:
-        self._dsn = dsn or os.getenv("DATABASE_URL")
+        self._dsn = dsn or get_settings().database_url
         if not self._dsn:
             raise RuntimeError("DATABASE_URL must be configured")
         self._pool: pool.ThreadedConnectionPool | None = None

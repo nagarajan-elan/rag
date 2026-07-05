@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.auth.api import auth_repository, router as auth_router
+from app.auth.middleware import AuthMiddleware
+from app.core.config import get_settings
 from app.core.database import initialize_database
 
 
@@ -14,7 +16,10 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="RAG Backend", version="1.0.0", lifespan=lifespan)
+settings = get_settings()
+
+app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+app.add_middleware(AuthMiddleware)
 app.include_router(auth_router)
 
 

@@ -8,6 +8,7 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
+      JWT_SECRET_KEY: change-me-in-production
     depends_on:
       db:
         condition: service_healthy
