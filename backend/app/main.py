@@ -7,6 +7,7 @@ from app.auth.api import auth_repository, router as auth_router
 from app.auth.middleware import AuthMiddleware
 from app.core.config import get_settings
 from app.core.database import initialize_database
+from app.documents.api import router as documents_router
 
 
 @asynccontextmanager
@@ -21,6 +22,7 @@ settings = get_settings()
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
 app.add_middleware(AuthMiddleware)
 app.include_router(auth_router)
+app.include_router(documents_router)
 
 
 class HealthResponse(BaseModel):
