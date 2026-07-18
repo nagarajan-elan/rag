@@ -7,7 +7,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from app.core.config import get_settings
+from ..config import settings
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -21,7 +21,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         token = authorization.removeprefix("Bearer ").strip()
         try:
-            payload = jwt.decode(token, get_settings().jwt_secret_key, algorithms=["HS256"])
+            payload = jwt.decode(token, settings.jwt_secret_key, algorithms=["HS256"])
         except jwt.PyJWTError:
             return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
 

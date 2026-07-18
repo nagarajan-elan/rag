@@ -8,7 +8,7 @@ from typing import Tuple
 import jwt
 from fastapi import HTTPException, status
 
-from app.core.config import get_settings
+from ..config import settings
 
 from .repository import PostgresAuthRepository
 from .schemas import LoginRequest, RefreshTokenRequest, SignupRequest, TokenResponse, UserResponse
@@ -17,7 +17,7 @@ from .schemas import LoginRequest, RefreshTokenRequest, SignupRequest, TokenResp
 class AuthService:
     def __init__(self, repository: PostgresAuthRepository | None = None) -> None:
         self.repository = repository or PostgresAuthRepository()
-        self.secret_key = get_settings().jwt_secret_key
+        self.secret_key = settings.jwt_secret_key
 
     async def signup(self, payload: SignupRequest) -> UserResponse:
         existing_user = await self.repository.get_user_by_email(str(payload.email))

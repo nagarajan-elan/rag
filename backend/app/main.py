@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.auth.api import auth_repository, router as auth_router
 from app.auth.middleware import AuthMiddleware
-from app.core.config import get_settings
+from .config import settings
 from app.core.database import initialize_database
 from app.documents.api import router as documents_router
 
@@ -17,7 +17,6 @@ async def lifespan(_: FastAPI):
     yield
 
 
-settings = get_settings()
 
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
 app.add_middleware(AuthMiddleware)
