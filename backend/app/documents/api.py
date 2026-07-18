@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-import io
+import asyncio
 import mimetypes
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from starlette.responses import StreamingResponse
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -91,15 +93,27 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
     extension = _resolve_extension(file.filename, file.content_type)
     bucket_name = os.getenv("MINIO_BUCKET", "documents")
     object_name = f"{uuid4().hex}{extension}"
-    content = await file.read()
+    chunk_size = 1024 * 1024
+    total_size = 0
+
+    temp_file = tempfile.SpooledTemporaryFile(max_size=chunk_size, mode="wb+")
 
     try:
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+            temp_file.write(chunk)
+            total_size += len(chunk)
+
+        temp_file.seek(0)
         client = _get_minio_client()
-        client.put_object(
+        await asyncio.to_thread(
+            client.put_object,
             bucket_name,
             object_name,
-            io.BytesIO(content),
-            length=len(content),
+            temp_file,
+            length=total_size,
             content_type=file.content_type or "application/octet-stream",
         )
     except RuntimeError as exc:
@@ -107,6 +121,7 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - depends on MinIO availability
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to upload file: {exc}") from exc
     finally:
+        temp_file.close()
         await file.close()
 
     return {
@@ -114,5 +129,31 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
         "object_name": object_name,
         "bucket": bucket_name,
         "content_type": file.content_type or "application/octet-stream",
-        "size": len(content),
+        "size": total_size,
     }
+
+
+@router.get("/{object_name}")
+async def get_document(object_name: str) -> StreamingResponse:
+    bucket_name = os.getenv("MINIO_BUCKET", "documents")
+    content_type = mimetypes.guess_type(object_name)[0] or "application/octet-stream"
+
+    try:
+        client = _get_minio_client()
+        response = await asyncio.to_thread(client.get_object, bucket_name, object_name)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - depends on MinIO availability
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Document not found: {exc}") from exc
+
+    async def iter_chunks() -> Any:
+        try:
+            while True:
+                chunk = await asyncio.to_thread(response.read, 1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            response.close()
+
+    return StreamingResponse(iter_chunks(), media_type=content_type)
